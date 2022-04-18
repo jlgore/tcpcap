@@ -13,8 +13,8 @@ Vagrant.configure("2") do |config|
       end
 
       pcap.vm.provision "shell",
-        inline: "echo Hello, World"
-        
+        path: "~/tcpcap/scripts/vmbootstrap.sh"
+
     end
   
     config.vm.define "kali" do |kali|
@@ -27,7 +27,7 @@ Vagrant.configure("2") do |config|
       kali.vm.provider :virtualbox do |v|
         v.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
         v.customize ["modifyvm", :id, "--memory", 512]
-        v.customize ["modifyvm", :id, "--name", "pcap"]
+        v.customize ["modifyvm", :id, "--name", "kali"]
       end
     end
   end
