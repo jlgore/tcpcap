@@ -31,7 +31,7 @@ const (
 
 var iface string = "enp0s8"
 
-// var bpfsyn string = "tcp[13] = 3"
+var bpfsyn string = "tcp[13] = 3"
 
 func main() {
 
@@ -57,7 +57,7 @@ func main() {
 	defer handle.Close()
 
 	// TODO: confirm correct set of filters for BPF for syn packets.
-	if err := handle.SetBPFFilter("tcp"); err != nil {
+	if err := handle.SetBPFFilter("tcp and tcp[tcpflags] == tcp-syn"); err != nil {
 		panic(err)
 	}
 
@@ -73,8 +73,9 @@ func main() {
 		addr := l2.SrcIP.String()
 
 		if c.Address == addr {
+			log.Printf("Previous Count: %d", c.Count)
 			c.Count++
-			log.Printf("Repeat Connection: %s has connected before %s times. \n", addr, c.Count)
+			log.Printf("Repeat Connection: %s has connected before %d times.\n", addr, c.Count)
 		} else {
 			c.Address = addr
 			c.Count = 1
