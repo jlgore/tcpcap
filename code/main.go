@@ -15,8 +15,9 @@ type logWriter struct {
 
 // [{'srcip': 'value', 'count': 0}, {'srcip': 'value', 'count': 0}]
 type Connections struct {
-	Address string
-	Count   int
+	Address    string
+	Count      int
+	Timestamps []time.Time
 }
 
 // make output match this -> 2021-04-28 15:28:05: New connection: 192.0.2.56:5973 -> 10.0.0.5:80
@@ -29,9 +30,11 @@ const (
 	defaultSnapLen = 262144
 )
 
+// set your interface here
+
 var iface string = "enp0s8"
 
-var bpfsyn string = "tcp[13] = 3"
+// var bpfsyn string = "tcp[13] = 3"
 
 func main() {
 
@@ -56,8 +59,10 @@ func main() {
 	}
 	defer handle.Close()
 
+	// tcp and tcp[tcpflags] == tcp-syn or
 	// TODO: confirm correct set of filters for BPF for syn packets.
-	if err := handle.SetBPFFilter("tcp and tcp[tcpflags] == tcp-syn"); err != nil {
+
+	if err := handle.SetBPFFilter("tcp"); err != nil {
 		panic(err)
 	}
 
@@ -72,13 +77,19 @@ func main() {
 		l2, _ := packet.Layer(layers.LayerTypeIPv4).(*layers.IPv4)
 		addr := l2.SrcIP.String()
 
+		// TODO switch to switch??
+
 		if c.Address == addr {
-			log.Printf("Previous Count: %d", c.Count)
+			log.Printf("Previous Count: %d, Previous Connect: %s", c.Count, c.Timestamps)
+			if c.Count >= 3 {
+				log.Printf("TO DO: Block")
+			}
 			c.Count++
 			log.Printf("Repeat Connection: %s has connected before %d times.\n", addr, c.Count)
 		} else {
 			c.Address = addr
 			c.Count = 1
+			c.Timestamps = append(c.Timestamps, time.Now())
 		}
 
 		log.Printf("New Connection: %s:%s -> %s:%s\n", l2.SrcIP, tcp.SrcPort, l2.DstIP, tcp.DstPort)
