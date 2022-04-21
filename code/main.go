@@ -25,6 +25,12 @@ type Connections struct {
 	Timestamps []time.Time
 }
 
+type RepeatConnections struct {
+	Address    string
+	Count      int
+	Timestamps []time.Time
+}
+
 // make output match this -> 2021-04-28 15:28:05: New connection: 192.0.2.56:5973 -> 10.0.0.5:80
 func (writer logWriter) Write(bytes []byte) (int, error) {
 	return fmt.Print(time.Now().UTC().Format("2006-01-02 15:04:05: ") + string(bytes))
@@ -58,12 +64,25 @@ func inTimeSpan(start, end, check time.Time) bool {
 	return !start.After(check) || !end.Before(check)
 }
 
-func stamper(timestamps []time.Time) {
+func stamper(address string, timestamps []time.Time) bool {
+
 	end := time.Now()
 	start := end.Add(-60 * time.Second)
+	rc := RepeatConnections{}
+
 	for _, t := range timestamps {
-		inTimeSpan(start, end, t)
+		span := inTimeSpan(start, end, t)
+		if span {
+			rc.Address = address
+			rc.Timestamps = append(rc.Timestamps, t)
+			fmt.Println("connectinons detected withing the last 60")
+			return true
+		} else if !span {
+			fmt.Println("no connections in the last 60 seconds")
+			return false
+		}
 	}
+	return false
 }
 
 func capMe() {
@@ -110,12 +129,18 @@ func capMe() {
 		// TODO switch to switch??
 
 		if c.Address == addr {
+			//log.Printf("Previous Connection Found: ")
 
-			stamper(c.Timestamps)
-
-			log.Printf("Previous Connection Found")
 			c.Count++
 			connsProcessed.Inc()
+
+			err := stamper(addr, c.Timestamps)
+			if err {
+				fmt.Println("connections in the last 60 seconds")
+			} else if !err {
+				fmt.Println("no connections in the last 60 seconds")
+			}
+
 			log.Printf("Repeat Connection: %s has connected before %d times.\n", addr, c.Count)
 
 			if c.Count >= 3 {
