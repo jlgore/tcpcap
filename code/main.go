@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
-	"time"
-
 	"net/http"
+	"os"
+	"time"
 
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/google/gopacket"
@@ -57,12 +57,21 @@ var (
 	})
 )
 
-// set your interface here
+func getEnv(key, defaultValue string) string {
+	value := os.Getenv(key)
+	if len(value) == 0 {
+		return defaultValue
+	}
+	return value
+}
 
-var iface string = "eth0"
+// set the interface here
+
+var iface string = getEnv("INTERFACE_NAME", "eth0")
 
 // var bpfsyn string = "tcp[13] = 3"
 
+// this function takes in a time span and a timestamp and returns true if the timestamp is within the time span
 func inTimeSpan(start, end, check time.Time) bool {
 	if start.Before(end) {
 		return !check.Before(start) && !check.After(end)
@@ -73,6 +82,7 @@ func inTimeSpan(start, end, check time.Time) bool {
 	return !start.After(check) || !end.Before(check)
 }
 
+// this function takes an array of timestamps associated with
 func stamper(address string, timestamps []time.Time) bool {
 
 	end := time.Now()
@@ -84,7 +94,7 @@ func stamper(address string, timestamps []time.Time) bool {
 		if span {
 			rc.Address = address
 			rc.Timestamps = append(rc.Timestamps, t)
-			fmt.Println("connectinons detected withing the last 60")
+			fmt.Println("connections detected withing the last 60")
 			return true
 		} else if !span {
 			fmt.Println("no connections in the last 60 seconds")
@@ -163,7 +173,7 @@ func capMe() {
 	// make the struct for the connections
 	c := Connections{}
 
-	// tcp and tcp[tcpflags] == tcp-syn or
+	// tcp[tcpflags] == tcp-syn
 	// TODO: confirm correct set of filters for BPF for syn packets.
 
 	if err := listener.SetBPFFilter("tcp[tcpflags] == tcp-syn"); err != nil {
@@ -178,20 +188,24 @@ func capMe() {
 	// loop through new packets to see if they meet the criteria
 
 	for pkt := range packets {
-		log.Println(pkt)
+
 		packet := gopacket.NewPacket(pkt.Data(), layers.LayerTypeEthernet, gopacket.Default)
 		tcp, _ := packet.Layer(layers.LayerTypeTCP).(*layers.TCP)
 		l2, _ := packet.Layer(layers.LayerTypeIPv4).(*layers.IPv4)
 		addr := l2.SrcIP.String()
+		log.Printf("New Connection: %s:%d -> %s:%d", l2.SrcIP, tcp.SrcPort, l2.DstIP, tcp.DstPort)
 
 		if c.Address != addr {
+			//log.Print("new connection")
+			//fmt.Println("DEBUG: address not in struct ", c.Address, c.Count, c.Ports)
 			c.Address = addr
 			c.Count = 1
 			c.Ports = append(c.Ports, int(tcp.DstPort))
 			c.Timestamps = append(c.Timestamps, time.Now())
 			connsProcessed.Inc()
 		} else if c.Address == addr {
-
+			//log.Print("repeat connection")
+			//fmt.Println("DEBUG: address already in struct ", c.Address, c.Count, c.Ports)
 			c.Count++
 			connsProcessed.Inc()
 
@@ -203,15 +217,14 @@ func capMe() {
 					log.Printf("Port scan detected: %s -> %s on ports %d", addr, l2.DstIP, c.Ports)
 					blockEm(addr)
 				} else {
-					fmt.Println("no connections in the last 60 seconds")
+					fmt.Println("Port Compare fire: ports == false")
 				}
 
 				c.Ports = append(c.Ports, int(tcp.DstPort))
 
-				log.Printf("Repeat Connection: %s has connected before %d times.\n", addr, c.Count)
+				//log.Printf("Repeat Connection: %s has connected before %d times.\n", addr, c.Count)
 
 			}
-			log.Printf("New Connection: %s:%s -> %s:%d", l2.SrcIP, tcp.SrcPort, l2.DstIP, tcp.DstPort)
 
 		}
 	}
