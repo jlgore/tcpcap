@@ -3,6 +3,7 @@ module tcpcap
 go 1.17
 
 require (
+	github.com/coreos/go-iptables v0.6.0
 	github.com/google/gopacket v1.1.19
 	github.com/prometheus/client_golang v1.12.1
 )

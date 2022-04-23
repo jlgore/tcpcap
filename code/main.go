@@ -7,6 +7,7 @@ import (
 
 	"net/http"
 
+	"github.com/coreos/go-iptables/iptables"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
@@ -82,7 +83,34 @@ func stamper(address string, timestamps []time.Time) bool {
 			return false
 		}
 	}
-	return false
+	var bool bool
+
+	if len(rc.Timestamps) > 3 {
+		bool = false
+	} else if len(rc.Timestamps) < 3 {
+		bool = true
+	}
+
+	return bool // not sure what to return here
+}
+
+func blockEm(address string) bool {
+
+	chain := "INPUT"
+	ipt, err := iptables.New()
+	if err != nil {
+		log.Fatal(err)
+		return false
+	}
+
+	pend := ipt.AppendUnique("filter", chain, "-s", address, "-j", "DROP")
+	log.Printf("BLOCK IP : %s", address)
+	if pend != nil {
+		log.Fatal(pend)
+		return false
+	}
+
+	return true
 }
 
 func capMe() {
@@ -129,23 +157,18 @@ func capMe() {
 		// TODO switch to switch??
 
 		if c.Address == addr {
-			//log.Printf("Previous Connection Found: ")
-
 			c.Count++
 			connsProcessed.Inc()
 
 			err := stamper(addr, c.Timestamps)
 			if err {
-				fmt.Println("connections in the last 60 seconds")
+				blockEm(addr)
 			} else if !err {
-				fmt.Println("no connections in the last 60 seconds")
+				fmt.Println("not blocked (yet)")
 			}
 
 			log.Printf("Repeat Connection: %s has connected before %d times.\n", addr, c.Count)
 
-			if c.Count >= 3 {
-				log.Printf("TO DO: Block")
-			}
 		} else {
 			c.Address = addr
 			c.Count = 1
