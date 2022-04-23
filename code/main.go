@@ -23,6 +23,7 @@ type logWriter struct {
 type Connections struct {
 	Address    string
 	Count      int
+	Ports      []int
 	Timestamps []time.Time
 }
 
@@ -45,6 +46,13 @@ const (
 var (
 	connsProcessed = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "tcpcap_processed_conns_total",
+		Help: "The total number of processed connections",
+	})
+)
+
+var (
+	blocksProcessed = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "tcpcap_processed_blocks_total",
 		Help: "The total number of processed connections",
 	})
 )
@@ -104,13 +112,33 @@ func blockEm(address string) bool {
 	}
 
 	pend := ipt.AppendUnique("filter", chain, "-s", address, "-j", "DROP")
-	log.Printf("BLOCK IP : %s", address)
+	blocksProcessed.Inc()
+	log.Printf("BLOCK IP: %s", address)
 	if pend != nil {
 		log.Fatal(pend)
 		return false
 	}
 
 	return true
+}
+
+func portCompare(newPort int, portArray []int) bool {
+	var portsConnected int
+	var toBlock bool
+
+	for _, port := range portArray {
+		if port != newPort {
+			portsConnected++
+		} else if port == newPort {
+			log.Print("no new port connected")
+		}
+	}
+	if portsConnected > 3 {
+		toBlock = true
+	} else if portsConnected < 3 {
+		toBlock = false
+	}
+	return toBlock
 }
 
 func capMe() {
@@ -138,7 +166,7 @@ func capMe() {
 	// tcp and tcp[tcpflags] == tcp-syn or
 	// TODO: confirm correct set of filters for BPF for syn packets.
 
-	if err := listener.SetBPFFilter("tcp and tcp[tcpflags] == tcp-syn"); err != nil {
+	if err := listener.SetBPFFilter("tcp[tcpflags] == tcp-syn"); err != nil {
 		panic(err)
 	}
 
@@ -147,37 +175,45 @@ func capMe() {
 	packets := gopacket.NewPacketSource(
 		listener, listener.LinkType()).Packets()
 
-	for pkt := range packets {
+	// loop through new packets to see if they meet the criteria
 
+	for pkt := range packets {
+		log.Println(pkt)
 		packet := gopacket.NewPacket(pkt.Data(), layers.LayerTypeEthernet, gopacket.Default)
 		tcp, _ := packet.Layer(layers.LayerTypeTCP).(*layers.TCP)
 		l2, _ := packet.Layer(layers.LayerTypeIPv4).(*layers.IPv4)
 		addr := l2.SrcIP.String()
 
-		// TODO switch to switch??
+		if c.Address != addr {
+			c.Address = addr
+			c.Count = 1
+			c.Ports = append(c.Ports, int(tcp.DstPort))
+			c.Timestamps = append(c.Timestamps, time.Now())
+			connsProcessed.Inc()
+		} else if c.Address == addr {
 
-		if c.Address == addr {
 			c.Count++
 			connsProcessed.Inc()
 
-			err := stamper(addr, c.Timestamps)
-			if err {
-				blockEm(addr)
-			} else if !err {
-				fmt.Println("not blocked (yet)")
+			ports := portCompare(int(tcp.SrcPort), c.Ports)
+
+			if ports {
+				err := stamper(addr, c.Timestamps)
+				if err {
+					log.Printf("Port scan detected: %s -> %s on ports %d", addr, l2.DstIP, c.Ports)
+					blockEm(addr)
+				} else {
+					fmt.Println("no connections in the last 60 seconds")
+				}
+
+				c.Ports = append(c.Ports, int(tcp.DstPort))
+
+				log.Printf("Repeat Connection: %s has connected before %d times.\n", addr, c.Count)
+
 			}
+			log.Printf("New Connection: %s:%s -> %s:%d", l2.SrcIP, tcp.SrcPort, l2.DstIP, tcp.DstPort)
 
-			log.Printf("Repeat Connection: %s has connected before %d times.\n", addr, c.Count)
-
-		} else {
-			c.Address = addr
-			c.Count = 1
-			c.Timestamps = append(c.Timestamps, time.Now())
-			connsProcessed.Inc()
 		}
-
-		log.Printf("New Connection: %s:%s -> %s:%s\n", l2.SrcIP, tcp.SrcPort, l2.DstIP, tcp.DstPort)
-
 	}
 }
 
