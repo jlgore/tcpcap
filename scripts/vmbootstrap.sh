@@ -1,8 +1,10 @@
 #!/bin/bash
+#exec >/root/SSout 2>/root/SSerr
 
 sudo apt-get update -y
 sudo apt-get upgrade -y
-sudo apt-get install libpcap-dev gcc ca-certificates curl gnupg lsb-release
+sudo apt-get install libpcap-dev gcc ca-certificates curl gnupg lsb-release make -y
+
 
 wget https://go.dev/dl/go1.18.1.linux-amd64.tar.gz
 
@@ -20,7 +22,4 @@ echo \
 sudo apt-get update -y
 
 sudo apt-get install docker-ce docker-ce-cli containerd.io -y
-
-#addgroup docker
-adduser vagrant docker
 
