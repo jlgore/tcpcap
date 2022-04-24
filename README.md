@@ -36,7 +36,8 @@ This application was built on an Ubuntu 20.04 VM. It requires `gcc`, `make`, `li
     * `make`
     * `gcc`
     * `libpcap-dev`
-* Install Docker Engine (or use the `vmbootstrap.sh` script run as `root`)
+    * `iptables`
+* Install Docker Engine
 * Clone the repo `git clone https://github.com/jlgore/tcpcap.git`
 * `sudo make` to build and run the container.
 
@@ -48,6 +49,6 @@ I used golang because the language is flexible enough where I can read some exam
 
 I wanted to store each address that connects in a struct with a count of how many times it's connected and an array of timestamps of each connection time. My hope was to find a way to store a dynamic set of timers using channels and spinning up a new timer for each IP present in the struct but I wasn't able to make that work how I wanted.
 
-To block (which was way simpler than I thought), I just used an iptables library and passed `net=host` to the docker container. I didn't think it would work but it did and I didn't need anything more complex. 
+To block (which was way simpler than I thought), I just used an iptables library and passed `net=host` to the docker container. I didn't think it would work but it did and I didn't need anything more complex. I've been using docker to sniff host interfaces for a while but I have never used docker to manipulate the host firewall directly. Pretty cool.
 
-If you block a machine and you would like to unblock, I have a command in the Makefile `make iptables` which will destroy all filter rules in the `INPUT` chain on netfilter. 
+If you block a machine and you would like to unblock, I have a command in the Makefile `make iptables` which will destroy all filter rules in the `INPUT` chain on netfilter. Be careful to not nuke any filter rules in the `INPUT` chain that you consider precious. 
