@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/coreos/go-iptables/iptables"
@@ -164,6 +165,7 @@ func capMe() {
 		// check if the address is already in the map
 		if foundConnection, ok := conn[addr]; ok {
 
+			// Checking the following:
 			// 1. entry in the map
 			// 2. is the port already in the array
 			// 3. if it isn't then your add it to the array
@@ -182,19 +184,22 @@ func capMe() {
 				foundConnection.Timestamps = append(foundConnection.Timestamps, time.Now())
 
 				// TODO(memory usage): If more than 3 then remove from front
+
 			}
 
 			//fmt.Printf("Existing %s %v\n", addr, foundConnection)
 
 			// This is a guy that exists
 			if shouldBlock(addr, foundConnection.Timestamps) {
-				log.Printf("Port scan detected: %s -> %s on ports %v\n", l2.SrcIP, l2.DstIP, foundConnection.Ports)
+				trimmed := strings.Trim(fmt.Sprint(foundConnection.Ports), "[]")
+				fmted := strings.Replace(trimmed, " ", ",", -1)
+				log.Printf("Port scan detected: %s -> %s on ports %v\n", l2.SrcIP, l2.DstIP, fmted)
 				if !blockEm(addr) {
 					fmt.Printf("Blocking failed %s\n", addr)
 				}
 			}
 
-			fmt.Println(foundConnection)
+			// debug comment fmt.Println(foundConnection)
 
 			conn[addr] = foundConnection
 

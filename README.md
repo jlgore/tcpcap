@@ -7,15 +7,15 @@ A golang program to track TCP connections via [gopacket](https://github.com/goog
 
 # To Do
 
-- [x] capture packets and log new connections.
-- [x] increment prometheus counters for total number of connections tracked and number of blocked IPs.
-- [x] How to filter only incoming traffic.
-- [x] block IPs in iptables. Pray it blocks on the host.
-    * Test blocks crashing application -- might be good now
+[x] capture packets and log new connections.
+[x] increment prometheus counters for total number of connections tracked and number of blocked IPs.
+[x] How to filter only incoming traffic.
+[x] block IPs in iptables. Pray it blocks on the host.
+    * Test blocks crashing application -- Resolved
     * Understand why some connections SHOULD be blocked and aren't --> i understand now my code was broken
-- [x] Dockerize applications.
-- [X] Build, test, and run application in docker using `Makefile`.
-[] Write tests for other functions in `main` -- struggled trying to test the function where I did the bulk of the logic/work. If I had more time I would craft pcaps that had known traffic that would be blocked/not blocked. 
+[x] Dockerize applications.
+[X] Build, test, and run application in docker using `Makefile`.
+[] Write tests for other functions -- struggled trying to test the function where I did the bulk of the logic/work. If I had more time I would craft pcaps that had known traffic that would be blocked/not blocked. 
 
 # How to Run
 
@@ -24,7 +24,7 @@ Clone the project and `cd` into the `code` directory. You can set the docker var
 ## Variables needed for Makefile:
 
 `INTERFACE_NAME=your_interface_name` - used to specifiy the docker container interface for sniffing
-`PUBLIC_IP=your_public_ip` - used to identify the host IP address to the golang app, sometimes I would run into a bug where outgoing traffic was being included depending on cronjobs (or in my case a remote VSCode session). One time I even blocked the host from the host!
+`PUBLIC_IP=your_public_ip` - used to identify the host IP address to the golang app, sometimes I run into a bug where outgoing traffic was being included depending on what else is running (or in my case a remote VSCode session). One time I even blocked the host from the host.
 
 # Dependencies
 
