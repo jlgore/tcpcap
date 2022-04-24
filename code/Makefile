@@ -3,6 +3,7 @@ BIN_FILE=tcpcap
 
 #vars
 INTERFACE_NAME=eth0
+PUBLIC_IP=YourPublicIP
 
 .PHONY: help build push all
 
@@ -23,4 +24,4 @@ build:
 run:
 	@docker run --net=host --cap-add=NET_ADMIN --cap-add=NET_RAW -e INTERFACE_NAME=${INTERFACE_NAME} ${BIN_FILE}
  
-all: iptables build run
+all: build run

@@ -19,19 +19,13 @@ import (
 type logWriter struct {
 }
 
-// [{'srcip': 'value', 'count': 0}, {'srcip': 'value', 'count': 0}]
-type Connections struct {
+type Connection struct {
 	Address    string
-	Count      int
 	Ports      []int
 	Timestamps []time.Time
 }
 
-type RepeatConnections struct {
-	Address    string
-	Count      int
-	Timestamps []time.Time
-}
+type ConnectionMap map[string]Connection
 
 // make output match this -> 2021-04-28 15:28:05: New connection: 192.0.2.56:5973 -> 10.0.0.5:80
 func (writer logWriter) Write(bytes []byte) (int, error) {
@@ -48,9 +42,7 @@ var (
 		Name: "tcpcap_processed_conns_total",
 		Help: "The total number of processed connections",
 	})
-)
 
-var (
 	blocksProcessed = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "tcpcap_processed_blocks_total",
 		Help: "The total number of processed connections",
@@ -68,48 +60,31 @@ func getEnv(key, defaultValue string) string {
 // set the interface here
 
 var iface string = getEnv("INTERFACE_NAME", "eth0")
+var publicIp string = getEnv("PUBLIC_IP", "127.0.0.1")
 
 // var bpfsyn string = "tcp[13] = 3"
 
-// this function takes in a time span and a timestamp and returns true if the timestamp is within the time span
-func inTimeSpan(start, end, check time.Time) bool {
-	if start.Before(end) {
-		return !check.Before(start) && !check.After(end)
-	}
-	if start.Equal(end) {
-		return check.Equal(start)
-	}
-	return !start.After(check) || !end.Before(check)
-}
-
 // this function takes an array of timestamps associated with
-func stamper(address string, timestamps []time.Time) bool {
+func shouldBlock(address string, timestamps []time.Time) bool {
 
-	end := time.Now()
-	start := end.Add(-60 * time.Second)
-	rc := RepeatConnections{}
+	// end := time.Now()
+	start := time.Now().Add(-60 * time.Second)
+	repeatConnections := 0
 
 	for _, t := range timestamps {
-		span := inTimeSpan(start, end, t)
-		if span {
-			rc.Address = address
-			rc.Timestamps = append(rc.Timestamps, t)
-			fmt.Println("connections detected withing the last 60")
-			return true
-		} else if !span {
-			fmt.Println("no connections in the last 60 seconds")
-			return false
+		// span := inTimeSpan(start, end, t)
+		inRange := t.After(start)
+		if inRange {
+			repeatConnections += 1
+		} else {
+			continue
 		}
 	}
-	var bool bool
 
-	if len(rc.Timestamps) > 3 {
-		bool = false
-	} else if len(rc.Timestamps) < 3 {
-		bool = true
-	}
+	canConnect := repeatConnections >= 3
 
-	return bool // not sure what to return here
+	return canConnect
+
 }
 
 func blockEm(address string) bool {
@@ -132,31 +107,16 @@ func blockEm(address string) bool {
 	return true
 }
 
-func portCompare(newPort int, portArray []int) bool {
-	var portsConnected int
-	var toBlock bool
-
-	for _, port := range portArray {
-		if port != newPort {
-			portsConnected++
-		} else if port == newPort {
-			log.Print("no new port connected")
-		}
-	}
-	if portsConnected > 3 {
-		toBlock = true
-	} else if portsConnected < 3 {
-		toBlock = false
-	}
-	return toBlock
-}
-
 func capMe() {
+
 	/*
 		here I am opening a capture on a selected interface and filtering it with a BPF filter
 		the bpf query is just a variable that we will default to tcp[13] = 3 to capture syn connections
 		from the chosen interface
 	*/
+
+	// init map
+	conn := make(map[string]Connection)
 
 	listener, err := pcap.OpenLive(iface, defaultSnapLen, true,
 		pcap.BlockForever)
@@ -169,9 +129,6 @@ func capMe() {
 
 	log.SetFlags(0)
 	log.SetOutput(new(logWriter))
-
-	// make the struct for the connections
-	c := Connections{}
 
 	// tcp[tcpflags] == tcp-syn
 	// TODO: confirm correct set of filters for BPF for syn packets.
@@ -188,46 +145,74 @@ func capMe() {
 	// loop through new packets to see if they meet the criteria
 
 	for pkt := range packets {
+		//fmt.Println("DEBUG: OPEN ", conn)
 
 		packet := gopacket.NewPacket(pkt.Data(), layers.LayerTypeEthernet, gopacket.Default)
 		tcp, _ := packet.Layer(layers.LayerTypeTCP).(*layers.TCP)
 		l2, _ := packet.Layer(layers.LayerTypeIPv4).(*layers.IPv4)
 		addr := l2.SrcIP.String()
-		log.Printf("New Connection: %s:%d -> %s:%d", l2.SrcIP, tcp.SrcPort, l2.DstIP, tcp.DstPort)
 
-		if c.Address != addr {
-			//log.Print("new connection")
-			//fmt.Println("DEBUG: address not in struct ", c.Address, c.Count, c.Ports)
-			c.Address = addr
-			c.Count = 1
-			c.Ports = append(c.Ports, int(tcp.DstPort))
-			c.Timestamps = append(c.Timestamps, time.Now())
+		// if the packet originates from host, ignore it and move on
+		if addr == publicIp {
+			continue // Ingore this packet
+
+		} else {
+			log.Printf("New Connection: %s:%d -> %s:%d\n", l2.SrcIP, tcp.SrcPort, l2.DstIP, tcp.DstPort)
 			connsProcessed.Inc()
-		} else if c.Address == addr {
-			//log.Print("repeat connection")
-			//fmt.Println("DEBUG: address already in struct ", c.Address, c.Count, c.Ports)
-			c.Count++
-			connsProcessed.Inc()
+		}
 
-			ports := portCompare(int(tcp.SrcPort), c.Ports)
+		// check if the address is already in the map
+		if foundConnection, ok := conn[addr]; ok {
 
-			if ports {
-				err := stamper(addr, c.Timestamps)
-				if err {
-					log.Printf("Port scan detected: %s -> %s on ports %d", addr, l2.DstIP, c.Ports)
-					blockEm(addr)
-				} else {
-					fmt.Println("Port Compare fire: ports == false")
+			// 1. entry in the map
+			// 2. is the port already in the array
+			// 3. if it isn't then your add it to the array
+
+			newPort := int(tcp.DstPort)
+			portFound := false
+			for _, port := range foundConnection.Ports {
+				if port == newPort {
+					portFound = true
+					break
 				}
-
-				c.Ports = append(c.Ports, int(tcp.DstPort))
-
-				//log.Printf("Repeat Connection: %s has connected before %d times.\n", addr, c.Count)
-
 			}
 
+			if !portFound {
+				foundConnection.Ports = append(foundConnection.Ports, newPort)
+				foundConnection.Timestamps = append(foundConnection.Timestamps, time.Now())
+
+				// TODO(memory usage): If more than 3 then remove from front
+			}
+
+			//fmt.Printf("Existing %s %v\n", addr, foundConnection)
+
+			// This is a guy that exists
+			if shouldBlock(addr, foundConnection.Timestamps) {
+				log.Printf("Port scan detected: %s -> %s on ports %v\n", l2.SrcIP, l2.DstIP, foundConnection.Ports)
+				if !blockEm(addr) {
+					fmt.Printf("Blocking failed %s\n", addr)
+				}
+			}
+
+			fmt.Println(foundConnection)
+
+			conn[addr] = foundConnection
+
+		} else {
+			// if it is not, create a new connection
+			conn[addr] = Connection{
+				Address: addr,
+				Ports:   []int{int(tcp.DstPort)},
+				Timestamps: []time.Time{
+					time.Now(),
+				},
+			}
 		}
+
+		// TODO(memory usage): If there's an old connection where all the timestamps are old then remove it
+
 	}
+
 }
 
 func main() {
