@@ -63,7 +63,7 @@ func getEnv(key, defaultValue string) string {
 var iface string = getEnv("INTERFACE_NAME", "eth0")
 var publicIp string = getEnv("PUBLIC_IP", "127.0.0.1")
 
-// var bpfsyn string = "tcp[13] = 3"
+var bpfsyn string = "tcp[tcpflags] == tcp-syn" // or "tcp[13] = 3"
 
 // this function takes an array of timestamps associated with
 func shouldBlock(address string, timestamps []time.Time) bool {
@@ -134,7 +134,7 @@ func capMe() {
 	// tcp[tcpflags] == tcp-syn
 	// TODO: confirm correct set of filters for BPF for syn packets.
 
-	if err := listener.SetBPFFilter("tcp[tcpflags] == tcp-syn"); err != nil {
+	if err := listener.SetBPFFilter(bpfsyn); err != nil {
 		panic(err)
 	}
 
@@ -187,9 +187,7 @@ func capMe() {
 
 			}
 
-			//fmt.Printf("Existing %s %v\n", addr, foundConnection)
-
-			// This is a guy that exists
+			// This is an address that exists
 			if shouldBlock(addr, foundConnection.Timestamps) {
 				trimmed := strings.Trim(fmt.Sprint(foundConnection.Ports), "[]")
 				fmted := strings.Replace(trimmed, " ", ",", -1)
