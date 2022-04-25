@@ -15,7 +15,7 @@ A golang program to track TCP connections via [gopacket](https://github.com/goog
     * Understand why some connections SHOULD be blocked and aren't --> i understand now my code was broken
 - [x] Dockerize applications.
 - [X] Build, test, and run application in docker using `Makefile`.
-- [ ] Write tests for other functions -- struggled trying to test the function where I did the bulk of the logic/work. If I had more time I would craft pcaps that had known traffic that would be blocked/not blocked. 
+- [ ] Write tests for other functions -- struggled trying to test the function where I did the bulk of the logic/work. If I had more time I would craft pcaps that had known traffic that would test as blocked/not blocked. 
 
 # How to Run
 
