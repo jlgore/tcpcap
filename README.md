@@ -9,7 +9,7 @@ A golang program to track TCP connections via [gopacket](https://github.com/goog
 
 - [x] capture packets and log new connections.
 - [x] increment prometheus counters for total number of connections tracked and number of blocked IPs.
-- [x] How to filter only incoming traffic.
+- [ ] How to filter only incoming traffic. 
 - [x] block IPs in iptables. Pray it blocks on the host.
     * Test blocks crashing application -- Resolved
     * Understand why some connections SHOULD be blocked and aren't --> i understand now my code was broken
