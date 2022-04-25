@@ -9,7 +9,7 @@ A golang program to track TCP connections via [gopacket](https://github.com/goog
 
 - [x] capture packets and log new connections.
 - [x] increment prometheus counters for total number of connections tracked and number of blocked IPs.
-- [ ] How to filter only incoming traffic. 
+- [ ] How to filter only incoming traffic. -- see `QUESTIONS.md` if you encounter this bug I couldn't track down fuly.
 - [x] block IPs in iptables. Pray it blocks on the host.
     * Test blocks crashing application -- Resolved
     * Understand why some connections SHOULD be blocked and aren't --> i understand now my code was broken
@@ -42,6 +42,13 @@ This application was built on an Ubuntu 20.04 VM. It requires `gcc`, `make`, `li
 * `sudo make` to build and run the container.
 
 All the code, Dockerfile, and fun stuff lives in the `code` directory.
+
+### Prometheus Metrics Exposed
+
+You should be able to scrape the following metrics from a Prometheus setup:
+
+"tcpcap_processed_conns_total" - a counter that increments on every new qualifed packet connection.
+"tcpcap_processed_blocks_total" - a counter that increments on every new blocked IP address.
 
 # Why you do what you did?
 
