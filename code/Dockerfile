@@ -13,6 +13,7 @@ RUN cd /src && go build -o tcpcap
 # run stage
 FROM alpine
 WORKDIR /app
+RUN apk --no-cache add libpcap-dev iptables
 COPY --from=build-env /src/tcpcap /app/tcpcap
 CMD /app/tcpcap
 
