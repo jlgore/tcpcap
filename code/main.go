@@ -122,7 +122,7 @@ func capMe() {
 	listener, err := pcap.OpenLive(iface, defaultSnapLen, true,
 		pcap.BlockForever)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	defer listener.Close()
 
@@ -135,7 +135,7 @@ func capMe() {
 	// TODO: confirm correct set of filters for BPF for syn packets.
 
 	if err := listener.SetBPFFilter(bpfsyn); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	log.Println("Listening on", iface, "...")
@@ -146,7 +146,6 @@ func capMe() {
 	// loop through new packets to see if they meet the criteria
 
 	for pkt := range packets {
-		//fmt.Println("DEBUG: OPEN ", conn)
 
 		packet := gopacket.NewPacket(pkt.Data(), layers.LayerTypeEthernet, gopacket.Default)
 		tcp, _ := packet.Layer(layers.LayerTypeTCP).(*layers.TCP)
